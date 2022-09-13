@@ -22,10 +22,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/logger"
-	"github.com/ethereum/go-ethereum/whisper"
+	"GO_Demo/go-ethereum/common"
+	"GO_Demo/go-ethereum/crypto"
+	"GO_Demo/go-ethereum/logger"
+	"GO_Demo/go-ethereum/whisper"
 )
 
 var qlogger = logger.NewLogger("XSHH")

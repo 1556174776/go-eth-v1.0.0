@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
+//go:build windows
 // +build windows
 
 package comms
@@ -28,10 +29,10 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/ethereum/go-ethereum/logger"
-	"github.com/ethereum/go-ethereum/logger/glog"
-	"github.com/ethereum/go-ethereum/rpc/codec"
-	"github.com/ethereum/go-ethereum/rpc/shared"
+	"GO_Demo/go-ethereum/logger"
+	"GO_Demo/go-ethereum/logger/glog"
+	"GO_Demo/go-ethereum/rpc/codec"
+	"GO_Demo/go-ethereum/rpc/shared"
 )
 
 var (

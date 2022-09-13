@@ -24,13 +24,13 @@ import (
 	"math/big"
 	"strconv"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/logger/glog"
+	"GO_Demo/go-ethereum/common"
+	"GO_Demo/go-ethereum/core"
+	"GO_Demo/go-ethereum/core/state"
+	"GO_Demo/go-ethereum/core/vm"
+	"GO_Demo/go-ethereum/crypto"
+	"GO_Demo/go-ethereum/ethdb"
+	"GO_Demo/go-ethereum/logger/glog"
 )
 
 func RunStateTestWithReader(r io.Reader, skipTests []string) error {

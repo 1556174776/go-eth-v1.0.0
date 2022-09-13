@@ -23,8 +23,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
+	"GO_Demo/go-ethereum/common"
+	"GO_Demo/go-ethereum/crypto"
 )
 
 func ParanoiaCheck(t1 *Trie, backend Backend) (bool, *Trie) {

@@ -21,11 +21,11 @@ import (
 	"math/rand"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/event"
-	"github.com/ethereum/go-ethereum/logger"
-	"github.com/ethereum/go-ethereum/logger/glog"
+	"GO_Demo/go-ethereum/core"
+	"GO_Demo/go-ethereum/core/types"
+	"GO_Demo/go-ethereum/event"
+	"GO_Demo/go-ethereum/logger"
+	"GO_Demo/go-ethereum/logger/glog"
 )
 
 const gpoProcessPastBlocks = 100

@@ -22,12 +22,12 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/crypto"
+	"GO_Demo/go-ethereum/common"
+	"GO_Demo/go-ethereum/core"
+	"GO_Demo/go-ethereum/core/state"
+	"GO_Demo/go-ethereum/core/types"
+	"GO_Demo/go-ethereum/core/vm"
+	"GO_Demo/go-ethereum/crypto"
 )
 
 func checkLogs(tlog []Log, logs state.Logs) error {

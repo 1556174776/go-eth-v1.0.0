@@ -16,7 +16,7 @@
 
 package trie
 
-import "github.com/ethereum/go-ethereum/crypto"
+import "GO_Demo/go-ethereum/crypto"
 
 var keyPrefix = []byte("secure-key-")
 

@@ -21,9 +21,10 @@ import (
 
 	"fmt"
 
-	"github.com/ethereum/go-ethereum/jsre"
-	"github.com/ethereum/go-ethereum/rpc/comms"
-	"github.com/ethereum/go-ethereum/rpc/shared"
+	"GO_Demo/go-ethereum/jsre"
+	"GO_Demo/go-ethereum/rpc/comms"
+	"GO_Demo/go-ethereum/rpc/shared"
+
 	"github.com/robertkrimen/otto"
 )
 

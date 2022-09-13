@@ -25,10 +25,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ethereum/go-ethereum/logger"
-	"github.com/ethereum/go-ethereum/logger/glog"
-	"github.com/ethereum/go-ethereum/rpc/codec"
-	"github.com/ethereum/go-ethereum/rpc/shared"
+	"GO_Demo/go-ethereum/logger"
+	"GO_Demo/go-ethereum/logger/glog"
+	"GO_Demo/go-ethereum/rpc/codec"
+	"GO_Demo/go-ethereum/rpc/shared"
 )
 
 // When https://github.com/golang/go/issues/4674 is implemented this could be replaced

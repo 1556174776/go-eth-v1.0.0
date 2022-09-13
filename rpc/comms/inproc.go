@@ -19,8 +19,8 @@ package comms
 import (
 	"fmt"
 
-	"github.com/ethereum/go-ethereum/rpc/codec"
-	"github.com/ethereum/go-ethereum/rpc/shared"
+	"GO_Demo/go-ethereum/rpc/codec"
+	"GO_Demo/go-ethereum/rpc/shared"
 )
 
 type InProcClient struct {

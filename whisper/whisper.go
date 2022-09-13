@@ -21,13 +21,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/ecies"
-	"github.com/ethereum/go-ethereum/event/filter"
-	"github.com/ethereum/go-ethereum/logger"
-	"github.com/ethereum/go-ethereum/logger/glog"
-	"github.com/ethereum/go-ethereum/p2p"
+	"GO_Demo/go-ethereum/common"
+	"GO_Demo/go-ethereum/crypto"
+	"GO_Demo/go-ethereum/crypto/ecies"
+	"GO_Demo/go-ethereum/event/filter"
+	"GO_Demo/go-ethereum/logger"
+	"GO_Demo/go-ethereum/logger/glog"
+	"GO_Demo/go-ethereum/p2p"
 	"gopkg.in/fatih/set.v0"
 )
 

@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
+//go:build none
 // +build none
 
 // Contains a simple whisper peer setup and self messaging to allow playing
@@ -27,12 +28,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/logger"
-	"github.com/ethereum/go-ethereum/p2p"
-	"github.com/ethereum/go-ethereum/p2p/nat"
-	"github.com/ethereum/go-ethereum/whisper"
+	"GO_Demo/go-ethereum/common"
+	"GO_Demo/go-ethereum/crypto"
+	"GO_Demo/go-ethereum/logger"
+	"GO_Demo/go-ethereum/p2p"
+	"GO_Demo/go-ethereum/p2p/nat"
+	"GO_Demo/go-ethereum/whisper"
 )
 
 func main() {

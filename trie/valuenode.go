@@ -16,7 +16,7 @@
 
 package trie
 
-import "github.com/ethereum/go-ethereum/common"
+import "GO_Demo/go-ethereum/common"
 
 type ValueNode struct {
 	trie  *Trie

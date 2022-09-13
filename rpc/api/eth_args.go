@@ -23,10 +23,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/rpc/shared"
+	"GO_Demo/go-ethereum/common"
+	"GO_Demo/go-ethereum/core/state"
+	"GO_Demo/go-ethereum/core/types"
+	"GO_Demo/go-ethereum/rpc/shared"
 )
 
 const (

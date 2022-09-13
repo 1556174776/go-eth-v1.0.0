@@ -27,8 +27,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"gopkg.in/fatih/set.v0"
+	"GO_Demo/go-ethereum/common"
+	"GO_Demo/go-ethereum/set"
 )
 
 type relativeHashFetcherFn func(common.Hash) error

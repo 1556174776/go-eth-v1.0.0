@@ -17,11 +17,11 @@
 package api
 
 import (
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/rpc/codec"
-	"github.com/ethereum/go-ethereum/rpc/shared"
-	"github.com/ethereum/go-ethereum/xeth"
+	"GO_Demo/go-ethereum/common"
+	"GO_Demo/go-ethereum/crypto"
+	"GO_Demo/go-ethereum/rpc/codec"
+	"GO_Demo/go-ethereum/rpc/shared"
+	"GO_Demo/go-ethereum/xeth"
 )
 
 const (

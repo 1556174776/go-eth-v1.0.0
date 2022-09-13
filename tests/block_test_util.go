@@ -28,16 +28,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/eth"
-	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/logger/glog"
-	"github.com/ethereum/go-ethereum/rlp"
+	"GO_Demo/go-ethereum/accounts"
+	"GO_Demo/go-ethereum/common"
+	"GO_Demo/go-ethereum/core"
+	"GO_Demo/go-ethereum/core/state"
+	"GO_Demo/go-ethereum/core/types"
+	"GO_Demo/go-ethereum/crypto"
+	"GO_Demo/go-ethereum/eth"
+	"GO_Demo/go-ethereum/ethdb"
+	"GO_Demo/go-ethereum/logger/glog"
+	"GO_Demo/go-ethereum/rlp"
 )
 
 // Block Test JSON Format

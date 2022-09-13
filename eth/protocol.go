@@ -19,8 +19,8 @@ package eth
 import (
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
+	"GO_Demo/go-ethereum/common"
+	"GO_Demo/go-ethereum/core/types"
 )
 
 // Supported versions of the eth protocol (first is primary).

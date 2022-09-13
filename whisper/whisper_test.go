@@ -20,8 +20,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/p2p"
-	"github.com/ethereum/go-ethereum/p2p/discover"
+	"GO_Demo/go-ethereum/p2p"
+	"GO_Demo/go-ethereum/p2p/discover"
 )
 
 func startTestCluster(n int) []*Whisper {

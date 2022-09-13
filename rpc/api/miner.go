@@ -19,12 +19,12 @@ package api
 import (
 	"fmt"
 
-	"github.com/ethereum/ethash"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/eth"
-	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rpc/codec"
-	"github.com/ethereum/go-ethereum/rpc/shared"
+	"GO_Demo/go-ethereum/ethash"
+	"GO_Demo/go-ethereum/common"
+	"GO_Demo/go-ethereum/eth"
+	"GO_Demo/go-ethereum/params"
+	"GO_Demo/go-ethereum/rpc/codec"
+	"GO_Demo/go-ethereum/rpc/shared"
 )
 
 const (
