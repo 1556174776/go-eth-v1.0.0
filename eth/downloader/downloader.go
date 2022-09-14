@@ -85,7 +85,7 @@ type hashCheckFn func(common.Hash) bool
 type blockRetrievalFn func(common.Hash) *types.Block
 
 // headRetrievalFn is a callback type for retrieving the head block from the local chain.
-// 检索获取本地区块链的创世区块
+// 检索获取本地区块链的最新区块
 type headRetrievalFn func() *types.Block
 
 // chainInsertFn is a callback type to insert a batch of blocks into the local chain.
@@ -133,7 +133,7 @@ type Downloader struct {
 	// Callbacks
 	hasBlock    hashCheckFn      // Checks if a block is present in the chain   检查区块是否存在于本地区块链
 	getBlock    blockRetrievalFn // Retrieves a block from the chain   从本地区块链获取指定hash的区块
-	headBlock   headRetrievalFn  // Retrieves the head block from the chain   获取本地区块链的创世区块
+	headBlock   headRetrievalFn  // Retrieves the head block from the chain   获取本地区块链的最新区块
 	insertChain chainInsertFn    // Injects a batch of blocks into the chain   向本地区块链中插入一批新区块
 	dropPeer    peerDropFn       // Drops a peer for misbehaving    删除指定p.id的恶意节点
 
@@ -179,7 +179,7 @@ func New(mux *event.TypeMux, hasBlock hashCheckFn, getBlock blockRetrievalFn, he
 	}
 	// Inject all the known bad hashes
 	// 向downloader.banned中注入所有已知的错误哈希
-	downloader.banned = set.New()
+	downloader.banned = set.New(set.ThreadSafe)
 	for hash, _ := range core.BadHashes {
 		downloader.banned.Add(hash)
 	}
@@ -253,10 +253,11 @@ func (d *Downloader) UnregisterPeer(id string) error {
 
 // Synchronise tries to sync up our local block chain with a remote peer, both
 // adding various sanity checks as well as wrapping it with various log entries.
+// 尝试将本地区块链与远程peer节点进行同步
 func (d *Downloader) Synchronise(id string, head common.Hash, td *big.Int) {
 	glog.V(logger.Detail).Infof("Attempting synchronisation: %v, head 0x%x, TD %v", id, head[:4], td)
 
-	switch err := d.synchronise(id, head, td); err {
+	switch err := d.synchronise(id, head, td); err { //进行同步(三个实参分别是:1.远程peer的的p.id 2.远程peer的头区块 3.远程peer的td难度累计值)
 	case nil:
 		glog.V(logger.Detail).Infof("Synchronisation completed")
 
@@ -267,7 +268,7 @@ func (d *Downloader) Synchronise(id string, head common.Hash, td *big.Int) {
 		glog.V(logger.Debug).Infof("Removing peer %v: %v", id, err)
 		d.dropPeer(id)
 
-	case errPendingQueue:
+	case errPendingQueue: //q.blockPool缓存中还有未加入到本地区块链上的区块
 		glog.V(logger.Debug).Infoln("Synchronisation aborted:", err)
 
 	default:
@@ -278,13 +279,20 @@ func (d *Downloader) Synchronise(id string, head common.Hash, td *big.Int) {
 // synchronise will select the peer and use it for synchronising. If an empty string is given
 // it will use the best peer possible and synchronize if it's TD is higher than our own. If any of the
 // checks fail an error will be returned. This method is synchronous
+// 与选择的远程peer进行区块链同步,并做好同步之前的检验:
+// 1.如果设置了模拟同步方法(测试用),则调用d.synchroniseMock(id, hash) (而不调用实际的同步方法d.syncWithPeer(p, hash, td))
+// 2.确保一次最多只有一个goroutine在进行区块同步(执行当前synchronise方法)
+// 3.检测到要进行同步的远端peer的头区块hash是否被禁止的,若是被禁止的则立即停止并退出
+// 4.如果在q.blockPool缓存中尚存在一些剩余未提取的区块,则立即终止本次同步
+// 5.初始化本地保存的本次同步所用到的区块信息;初始化peerSet节点集合中各个peer对象的状态(1.置位闲置状态  2.区块下载容量置位1)
+// 6.完成以上验证与操作后,调用d.syncWithPeer(p, hash, td)完成与对端peer的同步
 func (d *Downloader) synchronise(id string, hash common.Hash, td *big.Int) error {
 	// Mock out the synchonisation if testing
 	if d.synchroniseMock != nil { //如果设置了模拟同步方法,则调用
 		return d.synchroniseMock(id, hash)
 	}
 	// Make sure only one goroutine is ever allowed past this point at once
-	if !atomic.CompareAndSwapInt32(&d.synchronising, 0, 1) { //确保一次最多只有一个goroutine在进行区块同步
+	if !atomic.CompareAndSwapInt32(&d.synchronising, 0, 1) { //确保一次最多只有一个goroutine在进行区块同步(执行当前synchronise方法)
 		return errBusy
 	}
 	defer atomic.StoreInt32(&d.synchronising, 0) //完成同步后,将d.synchronising重新设置为0
@@ -294,11 +302,11 @@ func (d *Downloader) synchronise(id string, hash common.Hash, td *big.Int) error
 		return errBannedHead
 	}
 	// Post a user notification of the sync (only once per session)
-	if atomic.CompareAndSwapInt32(&d.notified, 0, 1) { //发布用户同步通知(每个会话仅一次)
+	if atomic.CompareAndSwapInt32(&d.notified, 0, 1) { //d.notified置为1,发布用户同步通知(每个会话仅一次)
 		glog.V(logger.Info).Infoln("Block synchronisation started")
 	}
 	// Abort if the queue still contains some leftover data
-	if _, cached := d.queue.Size(); cached > 0 && d.queue.GetHeadBlock() != nil { //如果在q.blockPool缓存中尚存在一些剩余为提取的区块,则立即终止本次同步
+	if _, cached := d.queue.Size(); cached > 0 && d.queue.GetHeadBlock() != nil { //如果在q.blockPool缓存中尚存在一些剩余未提取的区块,则立即终止本次同步
 		return errPendingQueue
 	}
 	// Reset the queue and peer set to clean any internal leftover state
@@ -321,12 +329,14 @@ func (d *Downloader) synchronise(id string, hash common.Hash, td *big.Int) error
 
 // Has checks if the downloader knows about a particular hash, meaning that its
 // either already downloaded of pending retrieval.
+// 检查downloader的queue是否存在指定的区块hash(这意味着该区块已经从远端peer下载或正在等待从远端peer检索)
 func (d *Downloader) Has(hash common.Hash) bool {
 	return d.queue.Has(hash)
 }
 
 // syncWithPeer starts a block synchronization based on the hash chain from the
 // specified peer and head hash.
+// 基于头区块hash和指定的远程peer,与目标节点进行区块同步
 func (d *Downloader) syncWithPeer(p *peer, hash common.Hash, td *big.Int) (err error) {
 	d.mux.Post(StartEvent{}) //产生一个同步开始事件
 	defer func() {
@@ -353,13 +363,13 @@ func (d *Downloader) syncWithPeer(p *peer, hash common.Hash, td *big.Int) (err e
 	case eth61:
 		// New eth/61, use forward, concurrent hash and block retrieval algorithm
 		// 新的eth/61版本,使用前向、并发哈希和区块检索算法
-		number, err := d.findAncestor(p)
+		number, err := d.findAncestor(p) //获取本地与p节点的公共祖先区块的编号
 		if err != nil {
 			return err
 		}
 		errc := make(chan error, 2)
-		go func() { errc <- d.fetchHashes(p, td, number+1) }()
-		go func() { errc <- d.fetchBlocks(number + 1) }()
+		go func() { errc <- d.fetchHashes(p, td, number+1) }() //三个实参分别是:对端peer对象/对端peer的td难度累计值/公共祖先区块编号
+		go func() { errc <- d.fetchBlocks(number + 1) }()      //实参为公共祖先区块的编号
 
 		// If any fetcher fails, cancel the other
 		if err := <-errc; err != nil {
@@ -400,9 +410,10 @@ func (d *Downloader) cancel() {
 }
 
 // Terminate interrupts the downloader, canceling all pending operations.
+// 终端当前downloader,取消当前同步操作
 func (d *Downloader) Terminate() {
-	atomic.StoreInt32(&d.interrupt, 1)
-	d.cancel()
+	atomic.StoreInt32(&d.interrupt, 1) //d.interrupt置位1,终止同步操作(终止process())
+	d.cancel()                         //重置清空queue队列
 }
 
 // fetchHashes60 starts retrieving hashes backwards from a specific peer and hash,
@@ -715,19 +726,20 @@ out:
 // on the correct chain, checking the top N blocks should already get us a match.
 // In the rare scenario when we ended up on a long soft fork (i.e. none of the
 // head blocks match), we do a binary search to find the common ancestor.
+// 尝试定位本地链与远程对等peer的区块链的共同祖先区块
 func (d *Downloader) findAncestor(p *peer) (uint64, error) {
 	glog.V(logger.Debug).Infof("%v: looking for common ancestor", p)
 
 	// Request out head blocks to short circuit ancestor location
-	head := d.headBlock().NumberU64()
-	from := int64(head) - int64(MaxHashFetch)
+	head := d.headBlock().NumberU64()         //获取本地区块链最新区块的区块编号
+	from := int64(head) - int64(MaxHashFetch) //计算获取在进行本次区块hash fetch前的上一次最新区块(head block)hash值
 	if from < 0 {
 		from = 0
 	}
-	go p.getAbsHashes(uint64(from), MaxHashFetch)
+	go p.getAbsHashes(uint64(from), MaxHashFetch) //申请获取从区块编号from开始的MaxHashFetch个区块的hash值(发送GetBlockHashesFromNumberMsg消息)
 
 	// Wait for the remote response to the head fetch
-	number, hash := uint64(0), common.Hash{}
+	number, hash := uint64(0), common.Hash{} //记录(双方区块链)的共同祖先区块的编号与哈希值
 	timeout := time.After(hashTTL)
 
 	for finished := false; !finished; {
@@ -735,7 +747,7 @@ func (d *Downloader) findAncestor(p *peer) (uint64, error) {
 		case <-d.cancelCh:
 			return 0, errCancelHashFetch
 
-		case hashPack := <-d.hashCh:
+		case hashPack := <-d.hashCh: //得到了对端节点对GetBlockHashesFromNumberMsg消息的回应hash
 			// Discard anything not from the origin peer
 			if hashPack.peerId != p.id {
 				glog.V(logger.Debug).Infof("Received hashes from incorrect peer(%s)", hashPack.peerId)
@@ -748,11 +760,12 @@ func (d *Downloader) findAncestor(p *peer) (uint64, error) {
 				return 0, errEmptyHashSet
 			}
 			// Check if a common ancestor was found
+			// 根据对端peer返回的hash集合确定两条链是否存在共同祖先区块
 			finished = true
 			for i := len(hashes) - 1; i >= 0; i-- {
-				if d.hasBlock(hashes[i]) {
-					number, hash = uint64(from)+uint64(i), hashes[i]
-					break
+				if d.hasBlock(hashes[i]) { //在本地区块链上检查是否存在获取hash值对应的区块
+					number, hash = uint64(from)+uint64(i), hashes[i] //记录下共同祖先区块的编号与hash值
+					break                                            //一旦找到共同祖先区块,则退出,不再循环查询
 				}
 			}
 
@@ -764,19 +777,19 @@ func (d *Downloader) findAncestor(p *peer) (uint64, error) {
 			return 0, errTimeout
 		}
 	}
-	// If the head fetch already found an ancestor, return
+	//若查询到了共同祖先区块,可以直接返回
 	if !common.EmptyHash(hash) {
 		glog.V(logger.Debug).Infof("%v: common ancestor: #%d [%x]", p, number, hash[:4])
 		return number, nil
 	}
-	// Ancestor not found, we need to binary search over our chain
-	start, end := uint64(0), head
+	// 如果没能查询到共同祖先区块,需要在整个链上进行二分查找(通过此方法查询到的公共祖先区块在区块链上要靠后)
+	start, end := uint64(0), head //分别为本地链创世区块和头区块的下标
 	for start+1 < end {
 		// Split our chain interval in two, and request the hash to cross check
 		check := (start + end) / 2
 
 		timeout := time.After(hashTTL)
-		go p.getAbsHashes(uint64(check), 1)
+		go p.getAbsHashes(uint64(check), 1) //向对端peer申请获取本地链中点区块hash值
 
 		// Wait until a reply arrives to this request
 		for arrived := false; !arrived; {
@@ -784,7 +797,7 @@ func (d *Downloader) findAncestor(p *peer) (uint64, error) {
 			case <-d.cancelCh:
 				return 0, errCancelHashFetch
 
-			case hashPack := <-d.hashCh:
+			case hashPack := <-d.hashCh: //如果得到了对端peer的hash响应
 				// Discard anything not from the origin peer
 				if hashPack.peerId != p.id {
 					glog.V(logger.Debug).Infof("Received hashes from incorrect peer(%s)", hashPack.peerId)
@@ -796,19 +809,19 @@ func (d *Downloader) findAncestor(p *peer) (uint64, error) {
 					glog.V(logger.Debug).Infof("%v: invalid search hash set (%d)", p, len(hashes))
 					return 0, errBadPeer
 				}
-				arrived = true
+				arrived = true //下次可以退出for循环了
 
 				// Modify the search interval based on the response
-				block := d.getBlock(hashes[0])
+				block := d.getBlock(hashes[0]) //在本地检索回应消息中指定的区块
 				if block == nil {
-					end = check
+					end = check //如果没能获取到共同区块,修改end值为中点值,跳出当前select,限定搜索范围为前半段区块链(往更前面去找)
 					break
 				}
-				if block.NumberU64() != check {
+				if block.NumberU64() != check { //查询到了区块,但是区块编号并非我们发送的中点值,说明是一次错误的回复
 					glog.V(logger.Debug).Infof("%v: non requested hash #%d [%x], instead of #%d", p, block.NumberU64(), block.Hash().Bytes()[:4], check)
 					return 0, errBadPeer
 				}
-				start = check
+				start = check //检索区块成功,check为共同祖先区块的编号,限定搜索范围为后半段区块链(往更后面去找)
 
 			case <-d.blockCh:
 				// Out of bounds blocks received, ignore them
@@ -819,11 +832,12 @@ func (d *Downloader) findAncestor(p *peer) (uint64, error) {
 			}
 		}
 	}
-	return start, nil
+	return start, nil //返回相对靠后的共同祖先区块的编号
 }
 
 // fetchHashes keeps retrieving hashes from the requested number, until no more
 // are returned, potentially throttling on the way.
+// 从公共祖先区块的hash值开始,不断向对端peer节点申请获取新的区块hash(不断调用getHashes(from)),直到q.hashQueue到达容量上限
 func (d *Downloader) fetchHashes(p *peer, td *big.Int, from uint64) error {
 	glog.V(logger.Debug).Infof("%v: downloading hashes from #%d", p, from)
 
@@ -838,8 +852,7 @@ func (d *Downloader) fetchHashes(p *peer, td *big.Int, from uint64) error {
 		go p.getAbsHashes(from, MaxHashFetch)
 		timeout.Reset(hashTTL)
 	}
-	// Start pulling hashes, until all are exhausted
-	getHashes(from)
+	getHashes(from) //从公共祖先区块hash值开始,申请向后获取MaxHashFetch个区块的hash值
 	gotHashes := false
 
 	for {
@@ -847,15 +860,16 @@ func (d *Downloader) fetchHashes(p *peer, td *big.Int, from uint64) error {
 		case <-d.cancelCh:
 			return errCancelHashFetch
 
-		case hashPack := <-d.hashCh:
+		case hashPack := <-d.hashCh: //收到了对方peer的回复hash值
 			// Make sure the active peer is giving us the hashes
 			if hashPack.peerId != p.id {
 				glog.V(logger.Debug).Infof("Received hashes from incorrect peer(%s)", hashPack.peerId)
 				break
 			}
-			timeout.Stop()
+			timeout.Stop() //终止timeout计时器
 
 			// If no more hashes are inbound, notify the block fetcher and return
+			// 如果hashPack包内不包含任何有效的hash值,检查是否因为双方节点因为td值不同步导致的无法获取有效的hash回应
 			if len(hashPack.hashes) == 0 {
 				glog.V(logger.Debug).Infof("%v: no available hashes", p)
 
@@ -875,7 +889,7 @@ func (d *Downloader) fetchHashes(p *peer, td *big.Int, from uint64) error {
 				// L: Sync begins, and finds common ancestor at 11
 				// L: Request new hashes up from 11 (R's TD was higher, it must have something)
 				// R: Nothing to give
-				if !gotHashes && td.Cmp(d.headBlock().Td) > 0 {
+				if !gotHashes && td.Cmp(d.headBlock().Td) > 0 { //将对端节点区块链的td累计值与本地区块链的td难度累计值进行比较(若对端td大于本地td,且本地从未获取过对端的hash回复)
 					return errStallingPeer
 				}
 				return nil
@@ -885,23 +899,23 @@ func (d *Downloader) fetchHashes(p *peer, td *big.Int, from uint64) error {
 			// Otherwise insert all the new hashes, aborting in case of junk
 			glog.V(logger.Detail).Infof("%v: inserting %d hashes from #%d", p, len(hashPack.hashes), from)
 
-			inserts := d.queue.Insert(hashPack.hashes, true)
-			if len(inserts) != len(hashPack.hashes) {
+			inserts := d.queue.Insert(hashPack.hashes, true) //将获取的hash值插入到q.hashQueue相应位置处
+			if len(inserts) != len(hashPack.hashes) {        //必须保证所有获取的hash值都被正确插入
 				glog.V(logger.Debug).Infof("%v: stale hashes", p)
 				return errBadPeer
 			}
 			// Notify the block fetcher of new hashes, but stop if queue is full
-			cont := d.queue.Pending() < maxQueuedHashes
+			cont := d.queue.Pending() < maxQueuedHashes //判断需要获取的区块是否超过了q.hashQueue最大容积
 			select {
-			case d.processCh <- cont:
+			case d.processCh <- cont: //
 			default:
 			}
-			if !cont {
+			if !cont { //如果超过了,则结束本方法,不再进行下一轮getHashes(from)
 				return nil
 			}
 			// Queue not yet full, fetch the next batch
-			from += uint64(len(hashPack.hashes))
-			getHashes(from)
+			from += uint64(len(hashPack.hashes)) //更新要获取的区块的编号值(后移)
+			getHashes(from)                      //再次申请获取新的区块hash
 
 		case <-timeout.C:
 			glog.V(logger.Debug).Infof("%v: hash request timed out", p)
@@ -913,6 +927,8 @@ func (d *Downloader) fetchHashes(p *peer, td *big.Int, from uint64) error {
 // fetchBlocks iteratively downloads the scheduled hashes, taking any available
 // peers, reserving a chunk of blocks for each, waiting for delivery and also
 // periodically checking for timeouts.
+// 从形参给定的公共祖先区块开始等待接收对端peer节点回复的区块,根据回复表现重新调整节点的声誉值q.rep,然后将区块加入本地区块链
+// 定期检查q.hashQueue中是否还有等待发送的区块hash值,向空闲节点申请这些区块hash
 func (d *Downloader) fetchBlocks(from uint64) error {
 	glog.V(logger.Debug).Infof("Downloading blocks from #%d", from)
 	defer glog.V(logger.Debug).Infof("Block download terminated")
@@ -924,7 +940,7 @@ func (d *Downloader) fetchBlocks(from uint64) error {
 	update := make(chan struct{}, 1)
 
 	// Prepare the queue and fetch blocks until the hash fetcher's done
-	d.queue.Prepare(from)
+	d.queue.Prepare(from) //调整q.blockOffset偏移量为公共祖先区块编号
 	finished := false
 
 	for {
@@ -932,52 +948,54 @@ func (d *Downloader) fetchBlocks(from uint64) error {
 		case <-d.cancelCh:
 			return errCancelBlockFetch
 
-		case blockPack := <-d.blockCh:
+		case blockPack := <-d.blockCh: //获取到了对方节点回复的区块
 			// If the peer was previously banned and failed to deliver it's pack
 			// in a reasonable time frame, ignore it's message.
-			if peer := d.peers.Peer(blockPack.peerId); peer != nil {
+			if peer := d.peers.Peer(blockPack.peerId); peer != nil { //回复消息的peer节点必须事先位于peerSet集合中
 				// Deliver the received chunk of blocks, and demote in case of errors
-				err := d.queue.Deliver(blockPack.peerId, blockPack.blocks)
+				err := d.queue.Deliver(blockPack.peerId, blockPack.blocks) //将获取的区块注入到q.blockCache队列
 				switch err {
-				case nil:
+				case nil: //1.获取的区块都没有问题,都成功加入到了q.blockCache队列
 					// If no blocks were delivered, demote the peer (need the delivery above)
-					if len(blockPack.blocks) == 0 {
+					if len(blockPack.blocks) == 0 { //blockPack中并没有包含任何有效的区块,降低对端peer的信誉值,重新设置为空闲状态
 						peer.Demote()
 						peer.SetIdle()
 						glog.V(logger.Detail).Infof("%s: no blocks delivered", peer)
 						break
 					}
 					// All was successful, promote the peer and potentially start processing
+					// blockPack中全都是有效的新区块,提高对端peer的信誉值,重新设置为空闲节点
 					peer.Promote()
 					peer.SetIdle()
 					glog.V(logger.Detail).Infof("%s: delivered %d blocks", peer, len(blockPack.blocks))
-					go d.process()
+					go d.process() //将区块从q.blockCache导入到本地区块链
 
-				case errInvalidChain:
+				case errInvalidChain: //从对端peer获取的区块是不连续的,视为无效
 					// The hash chain is invalid (blocks are not ordered properly), abort
 					return err
 
-				case errNoFetchesPending:
+				case errNoFetchesPending: //在q.pendPool中已经不存在对此peer节点发送fetcherRequest的记录(意味着此对等peer的回复超时了)
 					// Peer probably timed out with its delivery but came through
 					// in the end, demote, but allow to to pull from this peer.
-					peer.Demote()
-					peer.SetIdle()
+					peer.Demote()  //降低信誉值
+					peer.SetIdle() //重设为空闲状态
 					glog.V(logger.Detail).Infof("%s: out of bound delivery", peer)
 
-				case errStaleDelivery:
+				case errStaleDelivery: //对端peer回复的区块与本地向其请求的区块完全不一样,通常是由新旧同步周期中的超时和异步交付引起的。不能将其设置为空闲，因为原始请求仍在运行中。
 					// Delivered something completely else than requested, usually
 					// caused by a timeout and delivery during a new sync cycle.
 					// Don't set it to idle as the original request should still be
 					// in flight.
-					peer.Demote()
+					peer.Demote() //仅降低信誉值
 					glog.V(logger.Detail).Infof("%s: stale delivery", peer)
 
 				default:
 					// Peer did something semi-useful, demote but keep it around
+					// Peer做了一些半有用的事情，降低信誉值但保留
 					peer.Demote()
 					peer.SetIdle()
 					glog.V(logger.Detail).Infof("%s: delivery partially failed: %v", peer, err)
-					go d.process()
+					go d.process() //将区块从q.blockCache导入到本地区块链
 				}
 			}
 			// Blocks arrived, try to update the progress
@@ -986,10 +1004,10 @@ func (d *Downloader) fetchBlocks(from uint64) error {
 			default:
 			}
 
-		case cont := <-d.processCh:
+		case cont := <-d.processCh: //每当q.hashQueue队列被填满,d.processCh管道就会收到false布尔值(意味着fetchHashes方法结束了)
 			// The hash fetcher sent a continuation flag, check if it's done
 			if !cont {
-				finished = true
+				finished = true //标志着fetchHashes方法已经结束
 			}
 			// Hashes arrive, try to update the progress
 			select {
@@ -1009,31 +1027,30 @@ func (d *Downloader) fetchBlocks(from uint64) error {
 			if d.peers.Len() == 0 {
 				return errNoPeers
 			}
-			// Check for block request timeouts and demote the responsible peers
-			for _, pid := range d.queue.Expire(blockHardTTL) {
-				if peer := d.peers.Peer(pid); peer != nil {
+			// 1.Check for block request timeouts and demote the responsible peers
+			for _, pid := range d.queue.Expire(blockHardTTL) { //返回所有过期fetchRequest查询包的目标peer节点
+				if peer := d.peers.Peer(pid); peer != nil { //在peerSet中找出这些节点,将其信誉值减半(因为没有及时回复)
 					peer.Demote()
 					glog.V(logger.Detail).Infof("%s: block delivery timeout", peer)
 				}
 			}
-			// If there's noting more to fetch, wait or terminate
-			if d.queue.Pending() == 0 {
-				if d.queue.InFlight() == 0 && finished {
+			// 2.If there's noting more to fetch, wait or terminate
+			if d.queue.Pending() == 0 { //如果q.hashQueue为空(即当前没有需要获取的区块了)
+				if d.queue.InFlight() == 0 && finished { //同时q.pendPool中也没有待发送的fetchRequest查询包(且fetchHashes方法已经结束)
 					glog.V(logger.Debug).Infof("Block fetching completed")
-					return nil
+					return nil //等待terminate
 				}
 				break
 			}
-			// Send a download request to all idle peers, until throttled
-			for _, peer := range d.peers.IdlePeers() {
-				// Short circuit if throttling activated
-				if d.queue.Throttle() {
+			// 3.Send a download request to all idle peers, until throttled
+			for _, peer := range d.peers.IdlePeers() { //遍历所有空闲节点
+				if d.queue.Throttle() { //检查是否需要限制区块的下载，如果是结束本次操作
 					break
 				}
 				// Reserve a chunk of hashes for a peer. A nil can mean either that
 				// no more hashes are available, or that the peer is known not to
 				// have them.
-				request := d.queue.Reserve(peer, peer.Capacity())
+				request := d.queue.Reserve(peer, peer.Capacity()) //从q.hashQueue中取出待获取的区块hash值，组装成fetchRequest查询包记录到q.pendPool队列中
 				if request == nil {
 					continue
 				}
@@ -1041,13 +1058,14 @@ func (d *Downloader) fetchBlocks(from uint64) error {
 					glog.Infof("%s: requesting %d blocks", peer, len(request.Hashes))
 				}
 				// Fetch the chunk and make sure any errors return the hashes to the queue
-				if err := peer.Fetch(request); err != nil {
+				if err := peer.Fetch(request); err != nil { //向空闲节点申请获取request请求包中的区块hash
 					glog.V(logger.Error).Infof("%v: fetch failed, rescheduling", peer)
-					d.queue.Cancel(request)
+					d.queue.Cancel(request) //如果组装fetchRequest查询包时出错,丢弃一个fetchRequest查询包,将包中所有需查询的区块hash重新加入到q.hashQueue集合
 				}
 			}
 			// Make sure that we have peers available for fetching. If all peers have been tried
 			// and all failed throw an error
+			// 如果区块检索请求未达到上限,但是q.pendPool中没有任何fetchRequest查询包产生,则表明没有可用于提取的对等点
 			if !d.queue.Throttle() && d.queue.InFlight() == 0 {
 				return errPeersUnavailable
 			}

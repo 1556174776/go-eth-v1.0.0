@@ -196,7 +196,7 @@ func (p *peer) RequestHashes(from common.Hash) error {
 
 // RequestHashesFromNumber fetches a batch of hashes from a peer, starting at the
 // requested block number, going upwards towards the genesis block.
-// 申请从对端peer获取一批区块hash值,从请求的区块号Number开始,向上到创世区块(发送GetBlockHashesFromNumberMsg消息)
+// 申请从对端peer获取一批区块hash值,从请求的区块号from开始,向后累计count个(发送GetBlockHashesFromNumberMsg消息)
 func (p *peer) RequestHashesFromNumber(from uint64, count int) error {
 	glog.V(logger.Debug).Infof("Peer [%s] fetching hashes (%d) from #%d...\n", p.id, count, from)
 	return p2p.Send(p.rw, GetBlockHashesFromNumberMsg, getBlockHashesFromNumberData{from, uint64(count)})

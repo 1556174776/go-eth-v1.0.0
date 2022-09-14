@@ -24,11 +24,11 @@ import (
 	"time"
 
 	"GO_Demo/go-ethereum/common"
-	"GO_Demo/go-ethereum/cookiejar.v2/collections/prque"
 	"GO_Demo/go-ethereum/core"
 	"GO_Demo/go-ethereum/core/types"
 	"GO_Demo/go-ethereum/logger"
 	"GO_Demo/go-ethereum/logger/glog"
+	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
 )
 
 const (

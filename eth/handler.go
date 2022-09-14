@@ -75,7 +75,7 @@ type ProtocolManager struct {
 
 	// channels for fetcher, syncer, txsyncLoop
 	newPeerCh chan *peer
-	txsyncCh  chan *txsync
+	txsyncCh  chan *txsync //存放需要发送给对端peer的txsync消息(包含从本地交易池中取出的交易)
 	quitSync  chan struct{}
 
 	// wait group is used for graceful shutdowns during downloading
@@ -258,7 +258,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		return p.SendBlockHashes(hashes) //向对方回复BlockHashesMsg消息,包含上述检索出的区块哈希值
 
-	case GetBlockHashesFromNumberMsg: //2.对方peer请求获取从指定区块开始的amount个区块的哈希值
+	case GetBlockHashesFromNumberMsg: //2.对方peer请求获取从指定区块开始向后数的amount个区块的哈希值
 		// Retrieve and decode the number of hashes to return and from which origin number
 		var request getBlockHashesFromNumberData
 		if err := msg.Decode(&request); err != nil {

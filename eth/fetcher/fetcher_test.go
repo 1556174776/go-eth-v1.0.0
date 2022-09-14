@@ -24,9 +24,9 @@ import (
 	"testing"
 	"time"
 
-	"GO_Demo/go-ethereum/common"
-	"GO_Demo/go-ethereum/core"
-	"GO_Demo/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/types"
 	"GO_Demo/go-ethereum/ethdb"
 )
 

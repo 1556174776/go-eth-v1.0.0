@@ -42,14 +42,14 @@ type txsync struct {
 }
 
 // syncTransactions starts sending all currently pending transactions to the given peer.
-// 为传入的peer对象绑定当前交易池中所有可供处理的交易
+// 为传入的peer对象绑定当前交易池中所有可供处理的交易,产生一条txsync消息
 func (pm *ProtocolManager) syncTransactions(p *peer) {
 	txs := pm.txpool.GetTransactions() //获取当前交易池可处理的交易集合(切片)
 	if len(txs) == 0 {
 		return
 	}
 	select {
-	case pm.txsyncCh <- &txsync{p, txs}: //将交易集合与对等peer关联
+	case pm.txsyncCh <- &txsync{p, txs}: //将交易集合与对等peer关联,产生一条txsync消息
 	case <-pm.quitSync:
 	}
 }
@@ -58,8 +58,7 @@ func (pm *ProtocolManager) syncTransactions(p *peer) {
 // connection. When a new peer appears, we relay all currently pending
 // transactions. In order to minimise egress bandwidth usage, we send
 // the transactions in small packs to one peer at a time.
-// 负责每一个新连接的初始化交易同步。每当出现一个新节点，我们传递当前所有的挂起的交易。
-// 为了最大限度降低带宽使用，我们每次给一个peer发送小数据包交易
+// 循环等待pm.txsyncCh管道产生的txsync消息(包含需要发送给对端peer的交易集合),然后调用send()向对端peer发送此txsync消息
 func (pm *ProtocolManager) txsyncLoop() {
 	var (
 		pending = make(map[discover.NodeID]*txsync) //记录与其他对等peer的txsync对象
@@ -68,17 +67,15 @@ func (pm *ProtocolManager) txsyncLoop() {
 		done    = make(chan error, 1)               // result of the send
 	)
 
-	//将传入的txsync对象中的交易集合发送给指定的peer对象
+	//将传入的txsync消息中的交易集合发送给指定的peer对象,同时将对应的txsync从pending队列中删除
 	send := func(s *txsync) {
-		// Fill pack with transactions up to the target size.
-		size := common.StorageSize(0)
-		pack.p = s.p //设置对端peer对象
+		size := common.StorageSize(0) //记录形参给定的txsync消息中的交易条数
+		pack.p = s.p                  //设置目标peer节点
 		pack.txs = pack.txs[:0]
 		for i := 0; i < len(s.txs) && size < txsyncPackSize; i++ {
-			pack.txs = append(pack.txs, s.txs[i]) //填充packet包的交易集合
+			pack.txs = append(pack.txs, s.txs[i]) //填充packet包的交易集合(将形参指定的txsync消息中的全部交易加入)
 			size += s.txs[i].Size()
 		}
-		// Remove the transactions that will be sent.
 		s.txs = s.txs[:copy(s.txs, s.txs[len(pack.txs):])] //删除已经被加入到packet包中的交易
 		if len(s.txs) == 0 {
 			delete(pending, s.p.ID()) //如果指定txsync对象中的全部交易都已被发送，将其从pending队列中删除
@@ -89,7 +86,7 @@ func (pm *ProtocolManager) txsyncLoop() {
 		go func() { done <- pack.p.SendTransactions(pack.txs) }() //将对应的packet包发送给相应的peer对象
 	}
 
-	// 随机的从当前pending队列中获取一个元素(txsync对象)作为返回值
+	// 随机的从当前pending队列中获取一个txsync消息作为返回值
 	pick := func() *txsync {
 		if len(pending) == 0 {
 			return nil
@@ -104,14 +101,14 @@ func (pm *ProtocolManager) txsyncLoop() {
 	}
 
 	//循环办理业务：
-	//1.第一次发送packet,需要从pm.txsyncCh管道中获取一个已经绑定完成的txsync对象,调用send()函数向其发送对应交易集合
+	//1.第一次发送packet,需要从pm.txsyncCh管道中获取一个txsync消息,调用send()函数向txsync消息指定的peer节点发送交易集合
 	//2.后续发送packet.由于每次发送packet都会向done管道发送信号,因此后续每当检测到done管道有信号则进行下一次packet发送
 	for {
 		select {
-		case s := <-pm.txsyncCh: //从管道txsyncCh获取一个已经绑定完成的txsync对象
+		case s := <-pm.txsyncCh: //从管道txsyncCh获取一个txsync消息
 			pending[s.p.ID()] = s //将txsync对象加入到当前函数的pending队列
-			if !sending {         //如果目前尚未发送任何packet
-				send(s) //则将上述txsync对象的交易集合发送个指定的peer
+			if !sending {         //如果目前尚未发送packet
+				send(s) //则将上述txsync消息包含的交易集合发送指定的peer
 			}
 		case err := <-done: //上次发送已完成(SendTransactions执行完毕)
 			sending = false //重置sending标志位
@@ -121,7 +118,7 @@ func (pm *ProtocolManager) txsyncLoop() {
 				delete(pending, pack.p.ID())
 			}
 			// Schedule the next send.
-			if s := pick(); s != nil { //从pending队列中再次随机获取一个txsync对象
+			if s := pick(); s != nil { //从pending队列中再次随机获取一个txsync消息
 				send(s) //发送packet
 			}
 		case <-pm.quitSync:
@@ -134,7 +131,7 @@ func (pm *ProtocolManager) txsyncLoop() {
 // downloading hashes and blocks as well as handling the announcement handler.
 func (pm *ProtocolManager) syncer() {
 	// Start and ensure cleanup of sync mechanisms
-	pm.fetcher.Start()
+	pm.fetcher.Start() //启动fetcher
 	defer pm.fetcher.Stop()
 	defer pm.downloader.Terminate()
 
@@ -142,16 +139,14 @@ func (pm *ProtocolManager) syncer() {
 	forceSync := time.Tick(forceSyncCycle)
 	for {
 		select {
-		case <-pm.newPeerCh:
+		case <-pm.newPeerCh: //完成了与新peer节点的协议handshake
 			// Make sure we have peers to select from, then sync
-			if pm.peers.Len() < minDesiredPeerCount {
+			if pm.peers.Len() < minDesiredPeerCount { //确保有足够多的已连接peer可供选择,然后才能开始同步
 				break
 			}
-			go pm.synchronise(pm.peers.BestPeer())
-
-		case <-forceSync:
-			// Force a sync even if not enough peers are present
-			go pm.synchronise(pm.peers.BestPeer())
+			go pm.synchronise(pm.peers.BestPeer()) //尝试将本地区块链与远程对等peer同步
+		case <-forceSync: //当forceSync计时器到达计时周期,即使没有足够的对等点，也强制同步
+			go pm.synchronise(pm.peers.BestPeer()) //尝试将本地区块链与远程对等peer同步
 
 		case <-pm.quitSync:
 			return
@@ -159,7 +154,6 @@ func (pm *ProtocolManager) syncer() {
 	}
 }
 
-// synchronise tries to sync up our local block chain with a remote peer.
 // 尝试将本地区块链与远程对等peer同步
 func (pm *ProtocolManager) synchronise(peer *peer) {
 	// Short circuit if no peers are available
@@ -169,7 +163,7 @@ func (pm *ProtocolManager) synchronise(peer *peer) {
 	// Make sure the peer's TD is higher than our own. If not drop.
 	// 要确保对端peer的TD难度累计值 > 当前本地区块链的td难度累计值(否则证明对端peer没有挖出新的区块)
 	if peer.Td().Cmp(pm.chainman.Td()) <= 0 {
-		return //小于,直接退出,不进行同步
+		return //小于等于,直接退出,不进行同步(如果相等表示没有变化,因此不需要进行同步;小于则需要由对方peer节点向本节点申请进行同步)
 	}
 	// Otherwise try to sync with the downloader
 	// 利用downloader完成同步
